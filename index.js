@@ -24,7 +24,11 @@ async function run() {
   try {
     await client.connect();
     const productsDb = client.db("productsDb");
+    const userDB = client.db("userDB");
     const productsCollection = productsDb.collection("productsCollection");
+    const usersCollection = userDB.collection("usersCollection");
+
+    // products routes
 
     app.get("/products", async (req, res) => {
       const productData = productsCollection.find();
@@ -59,6 +63,45 @@ async function run() {
       });
       res.send(result);
     });
+
+    // user routes
+
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const token = createToken(user);
+
+      const userExists = await usersCollection.findOne({ email: user?.email });
+      if (userExists?._id) {
+        return res.send("login successful", token);
+      }
+      await usersCollection.insertOne(user);
+      res.send({ token });
+    });
+
+    app.get("/users", async (req, res) => {
+      const usersData = usersCollection.find();
+      const result = await usersData.toArray();
+      res.send(result);
+    });
+
+    app.get("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const result = await usersCollection.findOne({ email: email });
+      res.send(result);
+    });
+
+    app.patch("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const userData = req.body;
+      const result = await usersCollection.updateOne(
+        { email },
+        { $set: userData },
+        { upsert: true }
+      );
+      res.send(result);
+    });
+
+    // payment routes
 
     app.post("/checkout", async (req, res) => {
       const { cart } = req.body;
