@@ -62,14 +62,14 @@ async function run() {
       const result = await productsCollection.insertOne(productData);
       res.send(result);
     });
-    app.get("/products/:id", async (req, res) => {
+    app.get("/products/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const productsData = await productsCollection.findOne({
         _id: new ObjectId(id),
       });
       res.send(productsData);
     });
-    app.patch("/products/:id", async (req, res) => {
+    app.patch("/products/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const updatedData = req.body;
       const result = await productsCollection.updateOne(
