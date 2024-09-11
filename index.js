@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const app = express();
+const jwt = require("jsonwebtoken");
 const port = process.env.PORT;
 const cors = require("cors");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
@@ -8,6 +9,27 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 app.use(cors());
 app.use(express.json());
+
+const createToken = (user) => {
+  const token = jwt.sign(
+    {
+      email: user.email,
+    },
+    "secret",
+    { expiresIn: "7d" }
+  );
+  return token;
+};
+
+const verifyToken = (req, res, next) => {
+  const token = req.headers.authorization.split(" ")[1];
+  const verify = jwt.verify(token, "secret");
+  if (!verify?.email) {
+    return res.send("you are not authorized");
+  }
+  req.user = verify.email;
+  next();
+};
 
 const uri = process.env.DATABASE_URL;
 
@@ -35,7 +57,7 @@ async function run() {
       const result = await productData.toArray();
       res.send(result);
     });
-    app.post("/products", async (req, res) => {
+    app.post("/products", verifyToken, async (req, res) => {
       const productData = req.body;
       const result = await productsCollection.insertOne(productData);
       res.send(result);
