@@ -62,7 +62,7 @@ async function run() {
       const result = await productsCollection.insertOne(productData);
       res.send(result);
     });
-    app.get("/products/:id", verifyToken, async (req, res) => {
+    app.get("/products/:id", async (req, res) => {
       const id = req.params.id;
       const productsData = await productsCollection.findOne({
         _id: new ObjectId(id),
@@ -88,7 +88,7 @@ async function run() {
 
     // user routes
 
-    app.post("/users", async (req, res) => {
+    app.post("/users", verifyToken, async (req, res) => {
       const user = req.body;
       const token = createToken(user);
 
