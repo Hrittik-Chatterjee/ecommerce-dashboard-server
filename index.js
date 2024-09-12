@@ -129,7 +129,10 @@ async function run() {
       const { cart } = req.body;
 
       // Calculate total amount from cart items
-      const totalPrice = cart.reduce((acc, item) => acc + item.totalPrice, 0);
+      const totalPrice = cart.reduce(
+        (acc, item) => acc + item.price * item.quantity,
+        0
+      );
 
       try {
         // Create a Checkout Session with Stripe
@@ -141,7 +144,7 @@ async function run() {
               product_data: {
                 name: item.title,
               },
-              unit_amount: item.totalPrice * 100, // Stripe uses cents
+              unit_amount: Math.round(item.price * 100), // Convert to cents
             },
             quantity: item.quantity,
           })),
@@ -150,6 +153,7 @@ async function run() {
           cancel_url: "http://localhost:5173/cancel",
         });
 
+        // Send the session ID to the frontend
         res.json({ id: session.id });
       } catch (error) {
         console.error("Error creating checkout session:", error);
