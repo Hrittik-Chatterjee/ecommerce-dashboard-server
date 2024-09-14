@@ -2,33 +2,47 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 const jwt = require("jsonwebtoken");
-const port = process.env.PORT;
 const cors = require("cors");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const bodyParser = require("body-parser"); // Needed to process Stripe webhooks
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET; // Add webhook secret
 
 app.use(cors());
 app.use(express.json());
+app.use(bodyParser.raw({ type: "application/json" })); // For Stripe webhook handling
 
+const port = process.env.PORT || 5000;
+
+// Function to create JWT token
 const createToken = (user) => {
   const token = jwt.sign(
     {
       email: user.email,
     },
-    "secret",
+    process.env.JWT_SECRET || "secret",
     { expiresIn: "7d" }
   );
   return token;
 };
 
+// Middleware to verify JWT token
 const verifyToken = (req, res, next) => {
-  const token = req.headers.authorization.split(" ")[1];
-  const verify = jwt.verify(token, "secret");
-  if (!verify?.email) {
-    return res.send("you are not authorized");
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) {
+    return res.status(403).send("Authorization token is missing.");
   }
-  req.user = verify.email;
-  next();
+
+  try {
+    const verify = jwt.verify(token, process.env.JWT_SECRET || "secret");
+    if (!verify?.email) {
+      return res.status(401).send("Unauthorized.");
+    }
+    req.user = verify.email;
+    next();
+  } catch (error) {
+    return res.status(401).send("Invalid token.");
+  }
 };
 
 const uri = process.env.DATABASE_URL;
@@ -47,21 +61,25 @@ async function run() {
     await client.connect();
     const productsDb = client.db("productsDb");
     const userDB = client.db("userDB");
+    const ordersDB = client.db("ordersDB"); // New orders database
     const productsCollection = productsDb.collection("productsCollection");
     const usersCollection = userDB.collection("usersCollection");
+    const ordersCollection = ordersDB.collection("ordersCollection"); // New orders collection
 
-    // products routes
+    // Product routes
 
     app.get("/products", async (req, res) => {
       const productData = productsCollection.find();
       const result = await productData.toArray();
       res.send(result);
     });
+
     app.post("/products", verifyToken, async (req, res) => {
       const productData = req.body;
       const result = await productsCollection.insertOne(productData);
       res.send(result);
     });
+
     app.get("/products/:id", async (req, res) => {
       const id = req.params.id;
       const productsData = await productsCollection.findOne({
@@ -69,6 +87,7 @@ async function run() {
       });
       res.send(productsData);
     });
+
     app.patch("/products/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const updatedData = req.body;
@@ -78,6 +97,7 @@ async function run() {
       );
       res.send(result);
     });
+
     app.delete("/products/:id", async (req, res) => {
       const id = req.params.id;
       const result = await productsCollection.deleteOne({
@@ -86,18 +106,18 @@ async function run() {
       res.send(result);
     });
 
-    // user routes
+    // User routes
 
-    app.post("/users", verifyToken, async (req, res) => {
+    app.post("/users", async (req, res) => {
       const user = req.body;
       const token = createToken(user);
 
       const userExists = await usersCollection.findOne({ email: user?.email });
       if (userExists?._id) {
-        return res.send("login successful", token);
+        return res.json({ message: "Login successful", token });
       }
       await usersCollection.insertOne(user);
-      res.send({ token });
+      res.json({ token });
     });
 
     app.get("/users", async (req, res) => {
@@ -108,7 +128,7 @@ async function run() {
 
     app.get("/users/:email", async (req, res) => {
       const email = req.params.email;
-      const result = await usersCollection.findOne({ email: email });
+      const result = await usersCollection.findOne({ email });
       res.send(result);
     });
 
@@ -123,10 +143,10 @@ async function run() {
       res.send(result);
     });
 
-    // payment routes
+    // Payment routes
 
     app.post("/checkout", async (req, res) => {
-      const { cart } = req.body;
+      const { cart, email } = req.body;
 
       // Calculate total amount from cart items
       const totalPrice = cart.reduce(
@@ -138,6 +158,7 @@ async function run() {
         // Create a Checkout Session with Stripe
         const session = await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
+          customer_email: email, // Use customer email passed from the frontend
           line_items: cart.map((item) => ({
             price_data: {
               currency: "usd",
@@ -161,16 +182,55 @@ async function run() {
       }
     });
 
+    // Stripe webhook to handle payment success
+    app.post(
+      "/webhook",
+      bodyParser.raw({ type: "application/json" }),
+      async (req, res) => {
+        const sig = req.headers["stripe-signature"];
+
+        let event;
+        try {
+          event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+        } catch (err) {
+          console.error("Webhook signature verification failed:", err);
+          return res.status(400).send(`Webhook Error: ${err.message}`);
+        }
+
+        // Handle the event
+        if (event.type === "checkout.session.completed") {
+          const session = event.data.object;
+
+          // Add the order to the ordersCollection
+          const order = {
+            email: session.customer_email,
+            items: session.display_items, // The items purchased
+            amount_total: session.amount_total,
+            payment_status: session.payment_status,
+            created_at: new Date(),
+          };
+
+          await ordersCollection.insertOne(order);
+          console.log("Order created successfully:", order);
+        }
+
+        res.json({ received: true });
+      }
+    );
+
     console.log("You successfully connected to MongoDB!");
   } finally {
+    // Close the connection when done
   }
 }
 run().catch(console.log);
 
+// Test route
 app.get("/", (req, res) => {
   res.send("Hello World!");
 });
 
+// Start server
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+  console.log(`Server is running on port ${port}`);
 });
