@@ -170,8 +170,8 @@ async function run() {
             quantity: item.quantity,
           })),
           mode: "payment",
-          success_url: "http://localhost:5173/success",
-          cancel_url: "http://localhost:5173/cancel",
+          success_url: "https://cap-quest.vercel.app/success",
+          cancel_url: "https://cap-quest.vercel.app/cancel",
         });
 
         // Send the session ID to the frontend
