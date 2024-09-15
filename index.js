@@ -5,63 +5,30 @@ const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const bodyParser = require("body-parser");
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+const bodyParser = require("body-parser"); // Needed to process Stripe webhooks
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET; // Add webhook secret
+
+console.log(endpointSecret);
 
 app.use(cors());
+app.use(express.json());
+app.use(bodyParser.raw({ type: "application/json" })); // For Stripe webhook handling
 
 const port = process.env.PORT || 5000;
 
-// Webhook route BEFORE app.use(express.json())
-app.post(
-  "/webhook",
-  bodyParser.raw({ type: "application/json" }), // Use raw body for Stripe webhooks
-  (req, res) => {
-    const sig = req.headers["stripe-signature"];
-    let event;
-
-    try {
-      event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-    } catch (err) {
-      console.error("Webhook signature verification failed:", err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    // Handle the event
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
-
-      // Create order in your database
-      const order = {
-        email: session.customer_email,
-        items: session.display_items,
-        amount_total: session.amount_total,
-        payment_status: session.payment_status,
-        created_at: new Date(),
-      };
-
-      ordersCollection.insertOne(order);
-      console.log("Order created successfully:", order);
-    }
-
-    res.json({ received: true });
-  }
-);
-
-// JSON body parser AFTER the webhook route
-app.use(express.json()); // Apply express.json() after the webhook
-
-// JWT creation function
+// Function to create JWT token
 const createToken = (user) => {
   const token = jwt.sign(
-    { email: user.email },
+    {
+      email: user.email,
+    },
     process.env.JWT_SECRET || "secret",
     { expiresIn: "7d" }
   );
   return token;
 };
 
-// JWT verification middleware
+// Middleware to verify JWT token
 const verifyToken = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) {
@@ -80,8 +47,9 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-// MongoDB connection and other routes
 const uri = process.env.DATABASE_URL;
+
+// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -94,13 +62,14 @@ async function run() {
   try {
     await client.connect();
     const productsDb = client.db("productsDb");
+    const userDB = client.db("userDB");
+    const ordersDB = client.db("ordersDB"); // New orders database
     const productsCollection = productsDb.collection("productsCollection");
-    const usersCollection = client.db("userDB").collection("usersCollection");
-    const ordersCollection = client
-      .db("ordersDB")
-      .collection("ordersCollection");
+    const usersCollection = userDB.collection("usersCollection");
+    const ordersCollection = ordersDB.collection("ordersCollection"); // New orders collection
 
     // Product routes
+
     app.get("/products", async (req, res) => {
       const productData = productsCollection.find();
       const result = await productData.toArray();
@@ -140,6 +109,7 @@ async function run() {
     });
 
     // User routes
+
     app.post("/users", async (req, res) => {
       const user = req.body;
       const token = createToken(user);
@@ -176,28 +146,31 @@ async function run() {
     });
 
     // Payment routes
+
     app.post("/checkout", async (req, res) => {
       const { cart, email } = req.body;
 
       try {
+        // Create a Checkout Session with Stripe
         const session = await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
-          customer_email: email,
+          customer_email: email, // Use customer email passed from the frontend
           line_items: cart.map((item) => ({
             price_data: {
               currency: "usd",
               product_data: {
                 name: item.title,
               },
-              unit_amount: Math.round(Number(item.price) * 100),
+              unit_amount: Math.round(Number(item.price) * 100), // Convert price to a number and multiply by 100 (to cents)
             },
-            quantity: item.quantity,
+            quantity: item.quantity, // Quantity from cart
           })),
           mode: "payment",
           success_url: "https://cap-quest.vercel.app/success",
           cancel_url: "https://cap-quest.vercel.app/cancel",
         });
 
+        // Send the session ID to the frontend
         res.json({ id: session.id });
       } catch (error) {
         console.error("Error creating checkout session:", error);
@@ -205,13 +178,75 @@ async function run() {
       }
     });
 
-    console.log("Connected to MongoDB!");
+    app.post(
+      "/webhook",
+      bodyParser.raw({ type: "application/json" }),
+      async (request, response) => {
+        const sig = request.headers["stripe-signature"];
+        let event;
+
+        try {
+          // Verify the event with Stripe signature
+          event = stripe.webhooks.constructEvent(
+            request.body,
+            sig,
+            endpointSecret
+          );
+        } catch (err) {
+          console.error("Webhook signature verification failed:", err.message);
+          return response.status(400).send(`Webhook Error: ${err.message}`);
+        }
+
+        // Handle the event
+        switch (event.type) {
+          case "checkout.session.completed": {
+            const session = event.data.object;
+
+            // Prepare order data
+            const newOrder = {
+              email: session.customer_email, // The customer's email
+              items:
+                session.display_items ||
+                session.line_items.map((item) => ({
+                  description: item.description,
+                  amount: item.amount_total,
+                  quantity: item.quantity,
+                })), // Items purchased (either display_items or line_items)
+              amount_total: session.amount_total, // Total payment amount
+              payment_status: session.payment_status, // Payment status from Stripe
+              created_at: new Date(), // Timestamp when the order was created
+            };
+
+            try {
+              // Save the order to MongoDB
+              await ordersCollection.insertOne(newOrder);
+              console.log("Order successfully created in the database.");
+            } catch (error) {
+              console.error("Error saving order to the database:", error);
+              return response
+                .status(500)
+                .send("Error creating order in database.");
+            }
+
+            break;
+          }
+
+          // Handle other event types if necessary
+          default:
+            console.log(`Unhandled event type: ${event.type}`);
+        }
+
+        // Return a 200 response to acknowledge receipt of the event
+        response.json({ received: true });
+      }
+    );
+
+    console.log("You successfully connected to MongoDB!");
   } finally {
-    // Keep connection open or close as necessary
+    // Close the connection when done
   }
 }
-
-run().catch(console.error);
+run().catch(console.log);
 
 // Test route
 app.get("/", (req, res) => {
