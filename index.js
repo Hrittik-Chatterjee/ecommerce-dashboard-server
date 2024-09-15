@@ -155,16 +155,20 @@ async function run() {
         // Create a Checkout Session with Stripe
         const session = await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
-          customer_email: email, // Use customer email passed from the frontend
+          customer_email: email,
           line_items: cart.map((item) => ({
             price_data: {
               currency: "usd",
               product_data: {
-                name: item.title,
+                name: item.title, // Title shown to the customer
+                metadata: {
+                  title: item.title, // Pass the title as metadata
+                  description: item.description, // Pass the description as metadata
+                },
               },
-              unit_amount: Math.round(Number(item.price)),
+              unit_amount: Math.round(Number(item.price) * 100), // Convert to cents
             },
-            quantity: item.quantity, // Quantity from cart
+            quantity: item.quantity,
           })),
           mode: "payment",
           success_url: "https://cap-quest.vercel.app/success",
@@ -201,10 +205,20 @@ async function run() {
             session.id
           );
 
-          // Assuming the cart items correspond to the line items you receive
+          // Map the line items back to store the correct title and description
+          const orderItems = lineItems.data.map((lineItem) => {
+            return {
+              title: lineItem.price.product_data.metadata.title, // Title from metadata
+              description: lineItem.price.product_data.metadata.description, // Description from metadata
+              quantity: lineItem.quantity,
+              price: lineItem.amount_total / 100, // Convert back to dollars
+            };
+          });
+
+          // Create the order object with title and description
           const order = {
             email: session.customer_email,
-            items: lineItems.data, // Use the retrieved line items
+            items: orderItems,
             amount_total: session.amount_total,
             payment_status: session.payment_status,
             created_at: new Date(),
