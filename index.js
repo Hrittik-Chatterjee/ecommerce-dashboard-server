@@ -162,7 +162,7 @@ async function run() {
               product_data: {
                 name: item.title,
               },
-              unit_amount: Math.round(Number(item.price) * 100), // Convert price to a number and multiply by 100 (to cents)
+              unit_amount: Math.round(Number(item.price)),
             },
             quantity: item.quantity, // Quantity from cart
           })),
@@ -195,17 +195,26 @@ async function run() {
       if (event.type === "checkout.session.completed") {
         const session = event.data.object;
 
-        // Add the order to the ordersCollection
-        const order = {
-          email: session.customer_email,
-          items: session.display_items, // The items purchased
-          amount_total: session.amount_total,
-          payment_status: session.payment_status,
-          created_at: new Date(),
-        };
+        try {
+          // Retrieve the line items from the session
+          const lineItems = await stripe.checkout.sessions.listLineItems(
+            session.id
+          );
 
-        await ordersCollection.insertOne(order);
-        console.log("Order created successfully:", order);
+          // Assuming the cart items correspond to the line items you receive
+          const order = {
+            email: session.customer_email,
+            items: lineItems.data, // Use the retrieved line items
+            amount_total: session.amount_total,
+            payment_status: session.payment_status,
+            created_at: new Date(),
+          };
+
+          await ordersCollection.insertOne(order);
+          console.log("Order created successfully:", order);
+        } catch (err) {
+          console.error("Failed to retrieve line items:", err);
+        }
       }
 
       res.json({ received: true });
