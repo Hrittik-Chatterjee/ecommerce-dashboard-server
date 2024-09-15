@@ -178,66 +178,39 @@ async function run() {
       }
     });
 
+    // Stripe webhook to handle payment success
     app.post(
       "/webhook",
       bodyParser.raw({ type: "application/json" }),
-      async (request, response) => {
-        const sig = request.headers["stripe-signature"];
-        let event;
+      async (req, res) => {
+        const sig = req.headers["stripe-signature"];
 
+        let event;
         try {
-          // Verify the event with Stripe signature
-          event = stripe.webhooks.constructEvent(
-            request.body,
-            sig,
-            endpointSecret
-          );
+          event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
         } catch (err) {
-          console.error("Webhook signature verification failed:", err.message);
-          return response.status(400).send(`Webhook Error: ${err.message}`);
+          console.error("Webhook signature verification failed:", err);
+          return res.status(400).send(`Webhook Error: ${err.message}`);
         }
 
         // Handle the event
-        switch (event.type) {
-          case "checkout.session.completed": {
-            const session = event.data.object;
+        if (event.type === "checkout.session.completed") {
+          const session = event.data.object;
 
-            // Prepare order data
-            const newOrder = {
-              email: session.customer_email, // The customer's email
-              items:
-                session.display_items ||
-                session.line_items.map((item) => ({
-                  description: item.description,
-                  amount: item.amount_total,
-                  quantity: item.quantity,
-                })), // Items purchased (either display_items or line_items)
-              amount_total: session.amount_total, // Total payment amount
-              payment_status: session.payment_status, // Payment status from Stripe
-              created_at: new Date(), // Timestamp when the order was created
-            };
+          // Add the order to the ordersCollection
+          const order = {
+            email: session.customer_email,
+            items: session.display_items, // The items purchased
+            amount_total: session.amount_total,
+            payment_status: session.payment_status,
+            created_at: new Date(),
+          };
 
-            try {
-              // Save the order to MongoDB
-              await ordersCollection.insertOne(newOrder);
-              console.log("Order successfully created in the database.");
-            } catch (error) {
-              console.error("Error saving order to the database:", error);
-              return response
-                .status(500)
-                .send("Error creating order in database.");
-            }
-
-            break;
-          }
-
-          // Handle other event types if necessary
-          default:
-            console.log(`Unhandled event type: ${event.type}`);
+          await ordersCollection.insertOne(order);
+          console.log("Order created successfully:", order);
         }
 
-        // Return a 200 response to acknowledge receipt of the event
-        response.json({ received: true });
+        res.json({ received: true });
       }
     );
 
