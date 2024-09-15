@@ -8,6 +8,8 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const bodyParser = require("body-parser"); // Needed to process Stripe webhooks
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET; // Add webhook secret
 
+console.log(endpointSecret);
+
 app.use(cors());
 app.use(express.json());
 app.use(bodyParser.raw({ type: "application/json" })); // For Stripe webhook handling
@@ -224,7 +226,7 @@ async function run() {
           event = stripe.webhooks.constructEvent(
             request.body,
             sig,
-            process.env.STRIPE_WEBHOOK_SECRET
+            endpointSecret
           );
         } catch (err) {
           console.error("Webhook signature verification failed:", err.message);
