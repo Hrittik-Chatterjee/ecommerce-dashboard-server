@@ -1,0 +1,36 @@
+
+    // Stripe webhook to handle payment success
+    // app.post(
+    //   "/webhook",
+    //   bodyParser.raw({ type: "application/json" }),
+    //   async (req, res) => {
+    //     const sig = req.headers["stripe-signature"];
+
+    //     let event;
+    //     try {
+    //       event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    //     } catch (err) {
+    //       console.error("Webhook signature verification failed:", err);
+    //       return res.status(400).send(`Webhook Error: ${err.message}`);
+    //     }
+
+    //     // Handle the event
+    //     if (event.type === "checkout.session.completed") {
+    //       const session = event.data.object;
+
+    //       // Add the order to the ordersCollection
+    //       const order = {
+    //         email: session.customer_email,
+    //         items: session.display_items, // The items purchased
+    //         amount_total: session.amount_total,
+    //         payment_status: session.payment_status,
+    //         created_at: new Date(),
+    //       };
+
+    //       await ordersCollection.insertOne(order);
+    //       console.log("Order created successfully:", order);
+    //     }
+
+    //     res.json({ received: true });
+    //   }
+    // );
