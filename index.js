@@ -10,6 +10,7 @@ const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET; // Add webhook secret
 console.log(endpointSecret);
 
 app.use(cors());
+app.use("/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 
 // For Stripe webhook handling
@@ -179,40 +180,36 @@ async function run() {
     });
 
     // Stripe webhook to handle payment success
-    app.post(
-      "/webhook",
-      express.raw({ type: "application/json" }), // Use express.raw() instead of bodyParser.raw()
-      async (req, res) => {
-        const sig = req.headers["stripe-signature"];
-        let event;
+    app.post("/webhook", async (req, res) => {
+      const sig = req.headers["stripe-signature"];
+      let event;
 
-        try {
-          event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-        } catch (err) {
-          console.error("Webhook signature verification failed:", err);
-          return res.status(400).send(`Webhook Error: ${err.message}`);
-        }
-
-        // Handle the event
-        if (event.type === "checkout.session.completed") {
-          const session = event.data.object;
-
-          // Add the order to the ordersCollection
-          const order = {
-            email: session.customer_email,
-            items: session.display_items, // The items purchased
-            amount_total: session.amount_total,
-            payment_status: session.payment_status,
-            created_at: new Date(),
-          };
-
-          await ordersCollection.insertOne(order);
-          console.log("Order created successfully:", order);
-        }
-
-        res.json({ received: true });
+      try {
+        event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+      } catch (err) {
+        console.error("Webhook signature verification failed:", err);
+        return res.status(400).send(`Webhook Error: ${err.message}`);
       }
-    );
+
+      // Handle the event
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object;
+
+        // Add the order to the ordersCollection
+        const order = {
+          email: session.customer_email,
+          items: session.display_items, // The items purchased
+          amount_total: session.amount_total,
+          payment_status: session.payment_status,
+          created_at: new Date(),
+        };
+
+        await ordersCollection.insertOne(order);
+        console.log("Order created successfully:", order);
+      }
+
+      res.json({ received: true });
+    });
 
     console.log("You successfully connected to MongoDB!");
   } finally {
