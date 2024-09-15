@@ -148,12 +148,6 @@ async function run() {
     app.post("/checkout", async (req, res) => {
       const { cart, email } = req.body;
 
-      // Calculate total amount from cart items
-      const totalPrice = cart.reduce(
-        (acc, item) => acc + item.price * item.quantity,
-        0
-      );
-
       try {
         // Create a Checkout Session with Stripe
         const session = await stripe.checkout.sessions.create({
@@ -165,9 +159,9 @@ async function run() {
               product_data: {
                 name: item.title,
               },
-              unit_amount: Math.round(item.price * 100), // Convert to cents
+              unit_amount: Math.round(Number(item.price) * 100), // Convert price to a number and multiply by 100 (to cents)
             },
-            quantity: item.quantity,
+            quantity: item.quantity, // Quantity from cart
           })),
           mode: "payment",
           success_url: "https://cap-quest.vercel.app/success",
@@ -183,38 +177,103 @@ async function run() {
     });
 
     // Stripe webhook to handle payment success
+    // app.post(
+    //   "/webhook",
+    //   bodyParser.raw({ type: "application/json" }),
+    //   async (req, res) => {
+    //     const sig = req.headers["stripe-signature"];
+
+    //     let event;
+    //     try {
+    //       event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    //     } catch (err) {
+    //       console.error("Webhook signature verification failed:", err);
+    //       return res.status(400).send(`Webhook Error: ${err.message}`);
+    //     }
+
+    //     // Handle the event
+    //     if (event.type === "checkout.session.completed") {
+    //       const session = event.data.object;
+
+    //       // Add the order to the ordersCollection
+    //       const order = {
+    //         email: session.customer_email,
+    //         items: session.display_items, // The items purchased
+    //         amount_total: session.amount_total,
+    //         payment_status: session.payment_status,
+    //         created_at: new Date(),
+    //       };
+
+    //       await ordersCollection.insertOne(order);
+    //       console.log("Order created successfully:", order);
+    //     }
+
+    //     res.json({ received: true });
+    //   }
+    // );
+
     app.post(
       "/webhook",
       bodyParser.raw({ type: "application/json" }),
-      async (req, res) => {
-        const sig = req.headers["stripe-signature"];
-
+      async (request, response) => {
+        const sig = request.headers["stripe-signature"];
         let event;
+
         try {
-          event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+          // Verify the event with Stripe signature
+          event = stripe.webhooks.constructEvent(
+            request.body,
+            sig,
+            endpointSecret
+          );
         } catch (err) {
-          console.error("Webhook signature verification failed:", err);
-          return res.status(400).send(`Webhook Error: ${err.message}`);
+          console.error("Webhook signature verification failed:", err.message);
+          return response.status(400).send(`Webhook Error: ${err.message}`);
         }
 
         // Handle the event
-        if (event.type === "checkout.session.completed") {
-          const session = event.data.object;
+        switch (event.type) {
+          case "checkout.session.completed": {
+            const session = event.data.object;
 
-          // Add the order to the ordersCollection
-          const order = {
-            email: session.customer_email,
-            items: session.display_items, // The items purchased
-            amount_total: session.amount_total,
-            payment_status: session.payment_status,
-            created_at: new Date(),
-          };
+            // Prepare order data
+            const newOrder = {
+              email: session.customer_email, // The customer's email
+              items:
+                session.display_items ||
+                session.line_items.map((item) => ({
+                  description: item.description,
+                  amount: item.amount_total,
+                  quantity: item.quantity,
+                })), // Items purchased (either display_items or line_items)
+              amount_total: session.amount_total, // Total payment amount
+              payment_status: session.payment_status, // Payment status from Stripe
+              created_at: new Date(), // Timestamp when the order was created
+            };
 
-          await ordersCollection.insertOne(order);
-          console.log("Order created successfully:", order);
+            try {
+              // Save the order to MongoDB
+              const ordersCollection = db.collection("orders");
+              await ordersCollection.insertOne(newOrder);
+              console.log("Order successfully created in the database.");
+            } catch (error) {
+              console.error("Error saving order to the database:", error);
+              return response
+                .status(500)
+                .send("Error creating order in database.");
+            }
+
+            break;
+          }
+
+          // ...handle other event types if necessary
+
+          default:
+            console.log(`Unhandled event type: ${event.type}`);
         }
 
-        res.json({ received: true });
+        // Return a 200 response to acknowledge receipt of the event
+        response.json({ received: true });
       }
     );
 
