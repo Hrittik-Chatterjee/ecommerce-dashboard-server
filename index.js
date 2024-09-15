@@ -224,7 +224,7 @@ async function run() {
           event = stripe.webhooks.constructEvent(
             request.body,
             sig,
-            endpointSecret
+            process.env.STRIPE_WEBHOOK_SECRET
           );
         } catch (err) {
           console.error("Webhook signature verification failed:", err.message);
@@ -253,7 +253,6 @@ async function run() {
 
             try {
               // Save the order to MongoDB
-              const ordersCollection = db.collection("orders");
               await ordersCollection.insertOne(newOrder);
               console.log("Order successfully created in the database.");
             } catch (error) {
