@@ -11,7 +11,7 @@ const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET; // Add webhook secret
 console.log(endpointSecret);
 
 app.use(cors());
-app.use(express.json());
+
 app.use(bodyParser.raw({ type: "application/json" })); // For Stripe webhook handling
 
 const port = process.env.PORT || 5000;
@@ -219,6 +219,7 @@ async function run() {
     // Close the connection when done
   }
 }
+app.use(express.json());
 run().catch(console.log);
 
 // Test route
