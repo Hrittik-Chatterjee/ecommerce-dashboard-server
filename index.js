@@ -12,64 +12,9 @@ const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET; // Add webhook secret
 app.use(cors());
 app.use(bodyParser.raw({ type: "application/json" })); // For Stripe webhook handling
 
-// Declare ordersCollection here so it can be accessed globally after MongoDB connects
-let ordersCollection;
-
 // Webhook route before express.json()
-app.post("/webhook", async (request, response) => {
-  const sig = request.headers["stripe-signature"];
-  let event;
-
-  try {
-    // Verify the event with Stripe signature
-    event = stripe.webhooks.constructEvent(request.body, sig, endpointSecret);
-  } catch (err) {
-    console.error("Webhook signature verification failed:", err.message);
-    return response.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  // Handle the event
-  switch (event.type) {
-    case "checkout.session.completed": {
-      const session = event.data.object;
-
-      // Prepare order data
-      const newOrder = {
-        email: session.customer_email,
-        items:
-          session.display_items ||
-          session.line_items.map((item) => ({
-            description: item.description,
-            amount: item.amount_total,
-            quantity: item.quantity,
-          })),
-        amount_total: session.amount_total,
-        payment_status: session.payment_status,
-        created_at: new Date(),
-      };
-
-      try {
-        // Save the order to MongoDB
-        await ordersCollection.insertOne(newOrder);
-        console.log("Order successfully created in the database.");
-      } catch (error) {
-        console.error("Error saving order to the database:", error);
-        return response.status(500).send("Error creating order in database.");
-      }
-      break;
-    }
-
-    default:
-      console.log(`Unhandled event type: ${event.type}`);
-  }
-
-  // Return a 200 response to acknowledge receipt of the event
-  response.json({ received: true });
-});
 
 // Use express.json() for other routes after the webhook
-app.use(express.json());
-
 const port = process.env.PORT || 5000;
 
 const uri = process.env.DATABASE_URL;
@@ -93,10 +38,67 @@ async function run() {
 
     const productsCollection = productsDb.collection("productsCollection");
     const usersCollection = userDB.collection("usersCollection");
-    ordersCollection = ordersDB.collection("ordersCollection"); // Assign ordersCollection here
+    const ordersCollection = ordersDB.collection("ordersCollection"); // Assign ordersCollection here
 
     // Now that MongoDB is connected, set up other routes
 
+    app.post("/webhook", async (request, response) => {
+      const sig = request.headers["stripe-signature"];
+      let event;
+
+      try {
+        // Verify the event with Stripe signature
+        event = stripe.webhooks.constructEvent(
+          request.body,
+          sig,
+          endpointSecret
+        );
+      } catch (err) {
+        console.error("Webhook signature verification failed:", err.message);
+        return response.status(400).send(`Webhook Error: ${err.message}`);
+      }
+
+      // Handle the event
+      switch (event.type) {
+        case "checkout.session.completed": {
+          const session = event.data.object;
+
+          // Prepare order data
+          const newOrder = {
+            email: session.customer_email,
+            items:
+              session.display_items ||
+              session.line_items.map((item) => ({
+                description: item.description,
+                amount: item.amount_total,
+                quantity: item.quantity,
+              })),
+            amount_total: session.amount_total,
+            payment_status: session.payment_status,
+            created_at: new Date(),
+          };
+
+          try {
+            // Save the order to MongoDB
+            await ordersCollection.insertOne(newOrder);
+            console.log("Order successfully created in the database.");
+          } catch (error) {
+            console.error("Error saving order to the database:", error);
+            return response
+              .status(500)
+              .send("Error creating order in database.");
+          }
+          break;
+        }
+
+        default:
+          console.log(`Unhandled event type: ${event.type}`);
+      }
+
+      // Return a 200 response to acknowledge receipt of the event
+      response.json({ received: true });
+    });
+    app.use(express.json());
     // Product routes
     app.get("/products", async (req, res) => {
       const productData = productsCollection.find();
