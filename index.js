@@ -210,8 +210,8 @@ async function run() {
           // Get customer email and cart data
           const customerEmail = session.customer_email;
 
-          // Store all cart items in MongoDB
           try {
+            // Map the cart items for the order to be saved
             const orderItems = cart.map((item) => ({
               _id: item._id,
               title: item.title,
@@ -224,15 +224,25 @@ async function run() {
               quantity: item.quantity,
             }));
 
-            // Create an order in MongoDB
-            await Order.create({
+            // Step 1: Store the order in the orders collection
+            await ordersCollection.insertOne({
               customerEmail: customerEmail,
               items: orderItems,
               paymentStatus: session.payment_status,
               createdAt: new Date(),
             });
 
-            res.status(200).send("Order successfully stored");
+            // Step 2: Update the stock quantity in the products collection
+            for (const item of cart) {
+              await productsCollection.updateOne(
+                { _id: item._id },
+                { $inc: { stock_quantity: -item.quantity } } // Decrease the stock quantity
+              );
+            }
+
+            res
+              .status(200)
+              .send("Order successfully stored and inventory updated");
           } catch (error) {
             console.error("Error storing order data:", error);
             res.status(500).send("Internal Server Error");
