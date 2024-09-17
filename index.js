@@ -169,6 +169,9 @@ async function run() {
           mode: "payment",
           success_url: "https://cap-quest.vercel.app/success",
           cancel_url: "https://cap-quest.vercel.app/cancel",
+          metadata: {
+            cart: JSON.stringify(cart), // Pass cart data as a string in metadata
+          },
         });
 
         // Send the session ID to the frontend
@@ -202,7 +205,7 @@ async function run() {
         if (event.type === "checkout.session.completed") {
           const session = event.data.object;
 
-          // Assuming the cart details were sent in the metadata or passed directly from Stripe
+          // Retrieve cart from session metadata
           const cart = session.metadata.cart
             ? JSON.parse(session.metadata.cart)
             : [];
@@ -224,7 +227,7 @@ async function run() {
               quantity: item.quantity,
             }));
 
-            // Step 1: Store the order in the orders collection
+            // Store the order in your orders collection
             await ordersCollection.insertOne({
               customerEmail: customerEmail,
               items: orderItems,
@@ -232,11 +235,11 @@ async function run() {
               createdAt: new Date(),
             });
 
-            // Step 2: Update the stock quantity in the products collection
+            // Update stock in products collection
             for (const item of cart) {
               await productsCollection.updateOne(
                 { _id: item._id },
-                { $inc: { stock_quantity: -item.quantity } } // Decrease the stock quantity
+                { $inc: { stock_quantity: -item.quantity } } // Decrease stock
               );
             }
 
