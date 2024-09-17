@@ -155,20 +155,16 @@ async function run() {
         // Create a Checkout Session with Stripe
         const session = await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
-          customer_email: email,
+          customer_email: email, // Use customer email passed from the frontend
           line_items: cart.map((item) => ({
             price_data: {
               currency: "usd",
               product_data: {
-                name: item.title, // Title shown to the customer
-                metadata: {
-                  title: item.title, // Pass the title as metadata
-                  description: item.description, // Pass the description as metadata
-                },
+                name: item.title,
               },
-              unit_amount: Math.round(Number(item.price) * 100), // Convert to cents
+              unit_amount: Math.round(Number(item.price) * 100),
             },
-            quantity: item.quantity,
+            quantity: item.quantity, // Quantity from cart
           })),
           mode: "payment",
           success_url: "https://cap-quest.vercel.app/success",
@@ -184,55 +180,68 @@ async function run() {
     });
 
     // Stripe webhook to handle payment success
-    app.post("/webhook", async (req, res) => {
-      const sig = req.headers["stripe-signature"];
-      let event;
-
-      try {
-        event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-      } catch (err) {
-        console.error("Webhook signature verification failed:", err);
-        return res.status(400).send(`Webhook Error: ${err.message}`);
-      }
-
-      // Handle the event
-      if (event.type === "checkout.session.completed") {
-        const session = event.data.object;
+    app.post(
+      "/webhook",
+      express.raw({ type: "application/json" }),
+      async (req, res) => {
+        const sig = req.headers["stripe-signature"];
+        let event;
 
         try {
-          // Retrieve the line items from the session
-          const lineItems = await stripe.checkout.sessions.listLineItems(
-            session.id
+          event = stripe.webhooks.constructEvent(
+            req.body,
+            sig,
+            process.env.STRIPE_WEBHOOK_SECRET
           );
-
-          // Map the line items back to store the correct title and description
-          const orderItems = lineItems.data.map((lineItem) => {
-            return {
-              title: lineItem.price.product_data.metadata.title, // Title from metadata
-              description: lineItem.price.product_data.metadata.description, // Description from metadata
-              quantity: lineItem.quantity,
-              price: lineItem.amount_total / 100, // Convert back to dollars
-            };
-          });
-
-          // Create the order object with title and description
-          const order = {
-            email: session.customer_email,
-            items: orderItems,
-            amount_total: session.amount_total,
-            payment_status: session.payment_status,
-            created_at: new Date(),
-          };
-
-          await ordersCollection.insertOne(order);
-          console.log("Order created successfully:", order);
         } catch (err) {
-          console.error("Failed to retrieve line items:", err);
+          console.error("Webhook signature verification failed:", err.message);
+          return res.status(400).send(`Webhook Error: ${err.message}`);
+        }
+
+        // Handle the checkout session completion event
+        if (event.type === "checkout.session.completed") {
+          const session = event.data.object;
+
+          // Assuming the cart details were sent in the metadata or passed directly from Stripe
+          const cart = session.metadata.cart
+            ? JSON.parse(session.metadata.cart)
+            : [];
+
+          // Get customer email and cart data
+          const customerEmail = session.customer_email;
+
+          // Store all cart items in MongoDB
+          try {
+            const orderItems = cart.map((item) => ({
+              _id: item._id,
+              title: item.title,
+              image_url: item.image_url,
+              category: item.category,
+              description: item.description,
+              price: item.price,
+              stock_quantity: item.stock_quantity,
+              userEmail: item.userEmail,
+              quantity: item.quantity,
+            }));
+
+            // Create an order in MongoDB
+            await Order.create({
+              customerEmail: customerEmail,
+              items: orderItems,
+              paymentStatus: session.payment_status,
+              createdAt: new Date(),
+            });
+
+            res.status(200).send("Order successfully stored");
+          } catch (error) {
+            console.error("Error storing order data:", error);
+            res.status(500).send("Internal Server Error");
+          }
+        } else {
+          res.status(400).end();
         }
       }
-
-      res.json({ received: true });
-    });
+    );
 
     console.log("You successfully connected to MongoDB!");
   } finally {
