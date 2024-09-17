@@ -162,16 +162,13 @@ async function run() {
               product_data: {
                 name: item.title,
               },
-              unit_amount: Math.round(Number(item.price) * 100),
+              unit_amount: Math.round(Number(item.price) * 100), // Convert price to a number and multiply by 100 (to cents)
             },
             quantity: item.quantity, // Quantity from cart
           })),
           mode: "payment",
           success_url: "https://cap-quest.vercel.app/success",
           cancel_url: "https://cap-quest.vercel.app/cancel",
-          metadata: {
-            cart: JSON.stringify(cart), // Pass cart data as a string in metadata
-          },
         });
 
         // Send the session ID to the frontend
@@ -183,78 +180,36 @@ async function run() {
     });
 
     // Stripe webhook to handle payment success
-    app.post(
-      "/webhook",
-      express.raw({ type: "application/json" }),
-      async (req, res) => {
-        const sig = req.headers["stripe-signature"];
-        let event;
+    app.post("/webhook", async (req, res) => {
+      const sig = req.headers["stripe-signature"];
+      let event;
 
-        try {
-          event = stripe.webhooks.constructEvent(
-            req.body,
-            sig,
-            process.env.STRIPE_WEBHOOK_SECRET
-          );
-        } catch (err) {
-          console.error("Webhook signature verification failed:", err.message);
-          return res.status(400).send(`Webhook Error: ${err.message}`);
-        }
-
-        // Handle the checkout session completion event
-        if (event.type === "checkout.session.completed") {
-          const session = event.data.object;
-
-          // Retrieve cart from session metadata
-          const cart = session.metadata.cart
-            ? JSON.parse(session.metadata.cart)
-            : [];
-
-          // Get customer email and cart data
-          const customerEmail = session.customer_email;
-
-          try {
-            // Map the cart items for the order to be saved
-            const orderItems = cart.map((item) => ({
-              _id: item._id,
-              title: item.title,
-              image_url: item.image_url,
-              category: item.category,
-              description: item.description,
-              price: item.price,
-              stock_quantity: item.stock_quantity,
-              userEmail: item.userEmail,
-              quantity: item.quantity,
-            }));
-
-            // Store the order in your orders collection
-            await ordersCollection.insertOne({
-              customerEmail: customerEmail,
-              items: orderItems,
-              paymentStatus: session.payment_status,
-              createdAt: new Date(),
-            });
-
-            // Update stock in products collection
-            for (const item of cart) {
-              await productsCollection.updateOne(
-                { _id: item._id },
-                { $inc: { stock_quantity: -item.quantity } } // Decrease stock
-              );
-            }
-
-            res
-              .status(200)
-              .send("Order successfully stored and inventory updated");
-          } catch (error) {
-            console.error("Error storing order data:", error);
-            res.status(500).send("Internal Server Error");
-          }
-        } else {
-          res.status(400).end();
-        }
+      try {
+        event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+      } catch (err) {
+        console.error("Webhook signature verification failed:", err);
+        return res.status(400).send(`Webhook Error: ${err.message}`);
       }
-    );
+
+      // Handle the event
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object;
+
+        // Add the order to the ordersCollection
+        const order = {
+          email: session.customer_email,
+          items: session.display_items, // The items purchased
+          amount_total: session.amount_total,
+          payment_status: session.payment_status,
+          created_at: new Date(),
+        };
+
+        await ordersCollection.insertOne(order);
+        console.log("Order created successfully:", order);
+      }
+
+      res.json({ received: true });
+    });
 
     console.log("You successfully connected to MongoDB!");
   } finally {
