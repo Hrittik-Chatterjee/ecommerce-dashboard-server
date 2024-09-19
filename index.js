@@ -210,7 +210,7 @@ async function run() {
             session.id
           );
 
-          // Assuming the cart items correspond to the line items you receive
+          // Create the order and insert it into the database
           const order = {
             email: session.customer_email,
             items: lineItems.data, // Use the retrieved line items
@@ -219,7 +219,6 @@ async function run() {
             created_at: new Date(),
           };
 
-          // Save the order in the database
           await ordersCollection.insertOne(order);
 
           // Update the product stock based on purchased quantities
@@ -227,14 +226,14 @@ async function run() {
             const productId = item.price.product; // Assuming this is your product ID
             const quantityPurchased = item.quantity;
 
-            // Find the product in your inventory and subtract the purchased quantity
+            // Update stock_quantity by reducing the purchased quantity
             await productsCollection.updateOne(
-              { _id: new ObjectId(productId) },
-              { $inc: { stock: -quantityPurchased } } // Decrease the stock by the quantity purchased
+              { _id: new ObjectId(productId) }, // Find product by its _id
+              { $inc: { stock_quantity: -quantityPurchased } } // Decrease stock quantity
             );
           }
 
-          console.log("Order created successfully:", order);
+          console.log("Order created and stock updated successfully:", order);
         } catch (err) {
           console.error(
             "Failed to retrieve line items or update product stock:",
