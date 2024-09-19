@@ -219,10 +219,27 @@ async function run() {
             created_at: new Date(),
           };
 
+          // Save the order in the database
           await ordersCollection.insertOne(order);
+
+          // Update the product stock based on purchased quantities
+          for (const item of lineItems.data) {
+            const productId = item.price.product; // Assuming this is your product ID
+            const quantityPurchased = item.quantity;
+
+            // Find the product in your inventory and subtract the purchased quantity
+            await productsCollection.updateOne(
+              { _id: new ObjectId(productId) },
+              { $inc: { stock: -quantityPurchased } } // Decrease the stock by the quantity purchased
+            );
+          }
+
           console.log("Order created successfully:", order);
         } catch (err) {
-          console.error("Failed to retrieve line items:", err);
+          console.error(
+            "Failed to retrieve line items or update product stock:",
+            err
+          );
         }
       }
 
