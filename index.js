@@ -161,7 +161,9 @@ async function run() {
               currency: "usd",
               product_data: {
                 name: item.title,
-                images: [item.image_url],
+                metadata: {
+                  image_url: item.image_url, // Store image URL in metadata
+                },
               },
               unit_amount: Math.round(Number(item.price)),
             },
@@ -202,15 +204,21 @@ async function run() {
             session.id
           );
 
-          // Assuming the cart items correspond to the line items you receive
+          // Build the order data, including image URLs from metadata
+          const orderItems = lineItems.data.map((item) => ({
+            title: item.description, // Assuming Stripe's description holds the product title
+            quantity: item.quantity,
+            price: item.amount_total / item.quantity / 100, // Convert price back to original format
+            image_url: item.price.product_metadata?.image_url, // Retrieve image_url from metadata
+          }));
+
           const order = {
             email: session.customer_email,
-            items: lineItems.data, // Use the retrieved line items
-            amount_total: session.amount_total,
+            items: orderItems,
+            amount_total: session.amount_total / 100, // Convert amount_total back to original format
             payment_status: session.payment_status,
             created_at: new Date(),
           };
-
           await ordersCollection.insertOne(order);
           console.log("Order created successfully:", order);
         } catch (err) {
