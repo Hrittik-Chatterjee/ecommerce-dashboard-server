@@ -147,19 +147,16 @@ async function run() {
     });
 
     //order routes
-    app.get("/users", async (req, res) => {
-      const usersData = usersCollection.find();
-      const result = await usersData.toArray();
-      res.send(result);
-    });
-    // Payment routes
     app.get("/order/:email", async (req, res) => {
       const email = req.params.email;
-      const order = await ordersCollection.findOne({ email });
+      const orders = await ordersCollection.find({ email }).toArray(); // Fetch all orders for the email
+      res.send(orders);
 
       // Send the order result to the frontend
       res.send(order);
     });
+    // Payment routes
+
     app.post("/checkout", async (req, res) => {
       const { cart, email } = req.body;
 
