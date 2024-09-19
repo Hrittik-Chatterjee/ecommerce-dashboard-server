@@ -146,8 +146,20 @@ async function run() {
       res.send(result);
     });
 
+    //order routes
+    app.get("/users", async (req, res) => {
+      const usersData = usersCollection.find();
+      const result = await usersData.toArray();
+      res.send(result);
+    });
     // Payment routes
+    app.get("/order/:email", async (req, res) => {
+      const email = req.params.email;
+      const order = await ordersCollection.findOne({ email });
 
+      // Send the order result to the frontend
+      res.send(order);
+    });
     app.post("/checkout", async (req, res) => {
       const { cart, email } = req.body;
 
