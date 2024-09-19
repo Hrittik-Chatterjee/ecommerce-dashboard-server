@@ -152,28 +152,27 @@ async function run() {
       const { cart, email } = req.body;
 
       try {
+        // Create a Checkout Session with Stripe
         const session = await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
-          customer_email: email,
+          customer_email: email, // Use customer email passed from the frontend
           line_items: cart.map((item) => ({
             price_data: {
               currency: "usd",
               product_data: {
                 name: item.title,
-                // Stripe does not support images in product_data; you can store image URLs in metadata
+                images: [item.image_url],
               },
-              unit_amount: Math.round(Number(item.price) * 100), // Stripe expects amount in cents
+              unit_amount: Math.round(Number(item.price)),
             },
-            quantity: item.quantity,
-            // Metadata to store additional info
-            description: item.description, // Optional
-            images: [item.image_url], // Add the image URL to metadata (Stripe does not display this in Checkout)
+            quantity: item.quantity, // Quantity from cart
           })),
           mode: "payment",
           success_url: "https://cap-quest.vercel.app/success",
           cancel_url: "https://cap-quest.vercel.app/cancel",
         });
 
+        // Send the session ID to the frontend
         res.json({ id: session.id });
       } catch (error) {
         console.error("Error creating checkout session:", error);
@@ -193,35 +192,21 @@ async function run() {
         return res.status(400).send(`Webhook Error: ${err.message}`);
       }
 
+      // Handle the event
       if (event.type === "checkout.session.completed") {
         const session = event.data.object;
 
         try {
+          // Retrieve the line items from the session
           const lineItems = await stripe.checkout.sessions.listLineItems(
             session.id
           );
 
-          // Calculate total items and total amount
-          const totalItems = lineItems.data.reduce(
-            (sum, item) => sum + item.quantity,
-            0
-          );
-          const totalAmount =
-            lineItems.data.reduce(
-              (sum, item) => sum + item.price.unit_amount * item.quantity,
-              0
-            ) / 100; // Convert from cents to dollars
-
+          // Assuming the cart items correspond to the line items you receive
           const order = {
             email: session.customer_email,
-            items: lineItems.data.map((item) => ({
-              title: item.description,
-              image_url: item.images[0], // Extract the image URL from metadata
-              quantity: item.quantity,
-              price: item.price.unit_amount / 100, // Convert from cents to dollars
-            })),
-            total_items: totalItems,
-            total_amount: totalAmount,
+            items: lineItems.data, // Use the retrieved line items
+            amount_total: session.amount_total,
             payment_status: session.payment_status,
             created_at: new Date(),
           };
