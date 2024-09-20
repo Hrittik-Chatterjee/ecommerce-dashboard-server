@@ -170,10 +170,12 @@ async function run() {
               currency: "usd",
               product_data: {
                 name: item.title,
+                images: [item.image_url], // Use 'images' to display the product image
               },
-              unit_amount: Math.round(Number(item.price)),
+              unit_amount: Math.round(Number(item.price) * 100),
+              // Stripe uses cents, multiply by 100
             },
-            quantity: item.quantity, // Quantity from cart
+            quantity: item.quantity,
           })),
           mode: "payment",
           success_url: "https://cap-quest.vercel.app/success",
