@@ -9,7 +9,11 @@ const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET; // Add webhook secret
 
 console.log(endpointSecret);
 
-app.use(cors());
+app.use(
+  cors({
+    origin: "https://cap-quest.vercel.app",
+  })
+);
 app.use("/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 
@@ -151,9 +155,6 @@ async function run() {
       const email = req.params.email;
       const orders = await ordersCollection.find({ email }).toArray(); // Fetch all orders for the email
       res.send(orders);
-
-      // Send the order result to the frontend
-      res.send(order);
     });
     // Payment routes
 
