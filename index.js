@@ -176,9 +176,6 @@ async function run() {
               // Stripe uses cents, multiply by 100
             },
             quantity: item.quantity,
-            metadata: {
-              productId: item._id.toString(), // Ensure you pass _id as a string
-            },
           })),
           mode: "payment",
           success_url: "https://cap-quest.vercel.app/success",
@@ -225,18 +222,6 @@ async function run() {
           };
 
           await ordersCollection.insertOne(order);
-
-          // Update the product stock based on purchased quantities
-          for (const item of lineItems.data) {
-            const productId = item.price.metadata.productId; // Use the MongoDB _id stored in metadata
-            const quantityPurchased = item.quantity;
-
-            // Update stock_quantity by reducing the purchased quantity
-            await productsCollection.updateOne(
-              { _id: new ObjectId(productId) }, // Find product by its _id
-              { $inc: { stock_quantity: -quantityPurchased } } // Decrease stock quantity
-            );
-          }
 
           console.log("Order created and stock updated successfully:", order);
         } catch (err) {
