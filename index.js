@@ -225,14 +225,22 @@ async function run() {
 
           // Update the product stock based on purchased quantities
           for (const item of lineItems.data) {
-            const productId = item.price.product; // Assuming this is your product ID
+            const productId = item.price.product; // Assuming this is your product ID from Stripe
             const quantityPurchased = item.quantity;
 
             // Update stock_quantity by reducing the purchased quantity
-            await productsCollection.updateOne(
-              { _id: new ObjectId(productId) }, // Find product by its _id
-              { $inc: { stock_quantity: -quantityPurchased } } // Decrease stock quantity
-            );
+            const product = await productsCollection.findOne({
+              stripeProductId: productId, // Ensure this field corresponds with the product in MongoDB
+            });
+
+            if (product) {
+              await productsCollection.updateOne(
+                { _id: new ObjectId(product._id) }, // Find product by its _id
+                { $inc: { stock_quantity: -quantityPurchased } } // Decrease stock quantity
+              );
+            } else {
+              console.error(`Product with Stripe ID ${productId} not found.`);
+            }
           }
 
           console.log("Order created and stock updated successfully:", order);
