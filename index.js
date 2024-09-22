@@ -33,18 +33,6 @@ const createToken = (user) => {
   return token;
 };
 
-// Middleware to verify Admin
-
-const verifyAdmin = (req, res, next) => {
-  const user = req.user; // Assuming req.user is set after verifying the token
-
-  // Check if user exists and is an admin
-  if (user && user.isAdmin) {
-    next(); // Allow access if the user is admin
-  } else {
-    return res.status(403).json({ message: "Access denied. Admins only." });
-  }
-};
 // Middleware to verify JWT token
 const verifyToken = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
@@ -61,6 +49,19 @@ const verifyToken = (req, res, next) => {
     next();
   } catch (error) {
     return res.status(401).send("Invalid token.");
+  }
+};
+
+//Middleware to verify Admin
+
+const verifyAdmin = (req, res, next) => {
+  const user = req.user; // Assuming req.user is set after verifying the token
+
+  // Check if user exists and is an admin
+  if (user && user.isAdmin) {
+    next(); // Allow access if the user is admin
+  } else {
+    return res.status(403).json({ message: "Access denied. Admins only." });
   }
 };
 
@@ -117,7 +118,7 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/products/:id", verifyAdmin, verifyToken, async (req, res) => {
+    app.delete("/products/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const result = await productsCollection.deleteOne({
         _id: new ObjectId(id),
