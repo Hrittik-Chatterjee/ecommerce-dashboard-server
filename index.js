@@ -8,12 +8,14 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb"); // Neede
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET; // Add webhook secret
 
 console.log(endpointSecret);
-
 app.use(
   cors({
-    origin: "https://cap-quest.vercel.app",
+    origin: "https://cap-quest.vercel.app", // Allow this specific origin
+    methods: ["GET", "POST", "PUT", "DELETE"], // Allowed HTTP methods
+    credentials: true, // Allow credentials if needed (like cookies or authentication headers)
   })
 );
+
 app.use("/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 
