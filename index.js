@@ -28,8 +28,9 @@ const createToken = (user) => {
   const token = jwt.sign(
     {
       email: user.email,
+      isAdmin: user.isAdmin, // Include the isAdmin field here
     },
-    process.env.JWT_SECRET || "secret",
+    "secret",
     { expiresIn: "7d" }
   );
   return token;
@@ -43,12 +44,16 @@ const verifyToken = (req, res, next) => {
   }
 
   try {
-    const verify = jwt.verify(token, process.env.JWT_SECRET || "secret");
-    if (!verify?.email) {
+    const decoded = jwt.verify(token, "secret");
+
+    if (!decoded) {
       return res.status(401).send("Unauthorized.");
     }
-    req.user = verify.email;
-    next();
+
+    // Attach the entire decoded token to req.user
+    req.user = decoded;
+
+    next(); // Proceed to the next middleware
   } catch (error) {
     return res.status(401).send("Invalid token.");
   }
@@ -57,11 +62,10 @@ const verifyToken = (req, res, next) => {
 //Middleware to verify Admin
 
 const verifyAdmin = (req, res, next) => {
-  const user = req.user; // Assuming req.user is set after verifying the token
+  const user = req.user; // req.user is set by verifyToken middleware
 
-  // Check if user exists and is an admin
   if (user && user.isAdmin) {
-    next(); // Allow access if the user is admin
+    next(); // Allow access if the user is an admin
   } else {
     return res.status(403).json({ message: "Access denied. Admins only." });
   }
