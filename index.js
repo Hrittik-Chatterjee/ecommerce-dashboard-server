@@ -87,7 +87,7 @@ async function run() {
     const productsCollection = productsDb.collection("productsCollection");
     const usersCollection = userDB.collection("usersCollection");
     const ordersCollection = ordersDB.collection("ordersCollection"); // New orders collection
-
+    console.log("j");
     // Product routes
 
     app.get("/products", async (req, res) => {
