@@ -50,10 +50,8 @@ const verifyToken = (req, res, next) => {
       return res.status(401).send("Unauthorized.");
     }
 
-    // Check if the token has isAdmin field
-    req.user = decoded;
-
-    next();
+    req.user = decoded; // Attach the decoded token to req.user
+    next(); // Proceed to the next middleware
   } catch (error) {
     return res.status(401).send("Invalid token.");
   }
