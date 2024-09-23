@@ -28,7 +28,7 @@ const createToken = (user) => {
   const token = jwt.sign(
     {
       email: user.email,
-      isAdmin: user.isAdmin, // Include the isAdmin field here
+      isAdmin: user.isAdmin || false, // Ensure the isAdmin field is present
     },
     "secret",
     { expiresIn: "7d" }
@@ -50,17 +50,16 @@ const verifyToken = (req, res, next) => {
       return res.status(401).send("Unauthorized.");
     }
 
-    // Attach the entire decoded token to req.user
+    // Check if the token has isAdmin field
     req.user = decoded;
 
-    next(); // Proceed to the next middleware
+    next();
   } catch (error) {
     return res.status(401).send("Invalid token.");
   }
 };
 
 //Middleware to verify Admin
-
 const verifyAdmin = (req, res, next) => {
   const user = req.user; // req.user is set by verifyToken middleware
 
