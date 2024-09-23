@@ -131,15 +131,24 @@ async function run() {
 
     // User routes
 
+    // User routes
     app.post("/users", async (req, res) => {
       const user = req.body;
-      const token = createToken(user);
 
+      // Check if the user exists in the database
       const userExists = await usersCollection.findOne({ email: user?.email });
-      if (userExists?._id) {
+
+      if (userExists) {
+        // User exists, create token with existing user's isAdmin field
+        const token = createToken(userExists); // Token for existing user
         return res.json({ message: "Login successful", token });
       }
+
+      // User does not exist, create a new user
       await usersCollection.insertOne(user);
+
+      // Create token with the new user's isAdmin field (default to false)
+      const token = createToken({ ...user, isAdmin: false }); // Token for new user
       res.json({ token });
     });
 
