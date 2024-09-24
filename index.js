@@ -34,7 +34,7 @@ const createToken = (user) => {
   return token;
 };
 
-// JWT Token verification middleware
+// Middleware to verify JWT token
 const verifyToken = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) {
@@ -46,7 +46,7 @@ const verifyToken = (req, res, next) => {
     if (!verify?.email) {
       return res.status(401).send("Unauthorized.");
     }
-    req.user = verify.email; // Attach the user's email to the req object
+    req.user = verify.email;
     next();
   } catch (error) {
     return res.status(401).send("Invalid token.");
@@ -105,7 +105,7 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/products", verifyToken, verifyAdmin, async (req, res) => {
+    app.post("/products", verifyToken, async (req, res) => {
       const productData = req.body;
       const result = await productsCollection.insertOne(productData);
       res.send(result);
@@ -119,7 +119,7 @@ async function run() {
       res.send(productsData);
     });
 
-    app.patch("/products/:id", verifyToken, verifyAdmin, async (req, res) => {
+    app.patch("/products/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const updatedData = req.body;
       const result = await productsCollection.updateOne(
@@ -129,7 +129,7 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/products/:id", verifyToken, verifyAdmin, async (req, res) => {
+    app.delete("/products/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const result = await productsCollection.deleteOne({
         _id: new ObjectId(id),
