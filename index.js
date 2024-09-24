@@ -23,20 +23,18 @@ app.use(express.json());
 
 const port = process.env.PORT || 5000;
 
-// Function to create JWT token
 const createToken = (user) => {
   const token = jwt.sign(
     {
       email: user.email,
-      isAdmin: user.isAdmin || false, // Ensure the isAdmin field is present
     },
-    "secret",
+    process.env.JWT_SECRET || "secret",
     { expiresIn: "7d" }
   );
   return token;
 };
 
-// Middleware to verify JWT token
+// JWT Token verification middleware
 const verifyToken = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) {
@@ -44,27 +42,14 @@ const verifyToken = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, "secret");
-
-    if (!decoded) {
+    const verify = jwt.verify(token, process.env.JWT_SECRET || "secret");
+    if (!verify?.email) {
       return res.status(401).send("Unauthorized.");
     }
-
-    req.user = decoded; // Attach the decoded token to req.user
-    next(); // Proceed to the next middleware
+    req.user = verify.email; // Attach the user's email to the req object
+    next();
   } catch (error) {
     return res.status(401).send("Invalid token.");
-  }
-};
-
-//Middleware to verify Admin
-const verifyAdmin = (req, res, next) => {
-  const user = req.user; // req.user is set by verifyToken middleware
-
-  if (user && user.isAdmin) {
-    next(); // Allow access if the user is an admin
-  } else {
-    return res.status(403).json({ message: "Access denied. Admins only." });
   }
 };
 
@@ -89,6 +74,28 @@ async function run() {
     const usersCollection = userDB.collection("usersCollection");
     const ordersCollection = ordersDB.collection("ordersCollection"); // New orders collection
     console.log("j");
+
+    // Admin verification middleware
+    const verifyAdmin = async (req, res, next) => {
+      const decodedEmail = req.user; // Use the email attached in verifyToken
+      try {
+        const query = { email: decodedEmail };
+        const user = await usersCollection.findOne(query);
+
+        if (!user) {
+          return res.status(404).send({ message: "User not found." });
+        }
+
+        if (!user.isAdmin) {
+          // Check if the user has isAdmin set to true
+          return res.status(403).send({ message: "Forbidden access." });
+        }
+
+        next(); // Proceed if user is an admin
+      } catch (error) {
+        return res.status(500).send({ message: "Internal Server Error." });
+      }
+    };
     // Product routes
 
     app.get("/products", async (req, res) => {
