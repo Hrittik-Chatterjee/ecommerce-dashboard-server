@@ -86,8 +86,8 @@ async function run() {
           return res.status(404).send({ message: "User not found." });
         }
 
-        if (!user.isAdmin) {
-          // Check if the user has isAdmin set to true
+        if (user.role !== "admin") {
+          // Check if the user's role is 'admin'
           return res.status(403).send({ message: "Forbidden access." });
         }
 
