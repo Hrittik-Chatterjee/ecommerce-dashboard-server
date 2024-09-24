@@ -76,26 +76,27 @@ async function run() {
     console.log("j");
 
     // Admin verification middleware
-    const verifyAdmin = async (req, res, next) => {
-      const decodedEmail = req.user; // Use the email attached in verifyToken
-      try {
-        const query = { email: decodedEmail };
-        const user = await usersCollection.findOne(query);
+    // const verifyAdmin = async (req, res, next) => {
+    //   const decodedEmail = req.user;
+    //   try {
+    //     const query = { email: decodedEmail };
+    //     const user = await usersCollection.findOne(query);
 
-        if (!user) {
-          return res.status(404).send({ message: "User not found." });
-        }
+    //     if (!user) {
+    //       return res.status(404).send({ message: "User not found." });
+    //     }
 
-        if (user.role !== "admin") {
-          // Check if the user's role is 'admin'
-          return res.status(403).send({ message: "Forbidden access." });
-        }
+    //     if (user.role !== "admin") {
 
-        next(); // Proceed if user is an admin
-      } catch (error) {
-        return res.status(500).send({ message: "Internal Server Error." });
-      }
-    };
+    //       return res.status(403).send({ message: "Forbidden access." });
+    //     }
+
+    //     next();
+    //   } catch (error) {
+    //     return res.status(500).send({ message: "Internal Server Error." });
+    //   }
+    // };
+
     // Product routes
 
     app.get("/products", async (req, res) => {
