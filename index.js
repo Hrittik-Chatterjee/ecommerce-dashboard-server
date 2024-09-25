@@ -10,9 +10,9 @@ const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET; // Add webhook secret
 console.log(endpointSecret);
 app.use(
   cors({
-    origin: "https://cap-quest.vercel.app", // Allow this specific origin
-    methods: ["GET", "POST", "PUT", "DELETE"], // Allowed HTTP methods
-    credentials: true, // Allow credentials if needed (like cookies or authentication headers)
+    origin: ["https://cap-quest.vercel.app", "http://localhost:5173"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
   })
 );
 
